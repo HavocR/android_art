@@ -43,7 +43,7 @@
 #include "base/systrace.h"
 #include "base/time_utils.h"
 #include "base/utils.h"
-#include "class_root.h"
+#include "class_root-inl.h"
 #include "dex/art_dex_file_loader.h"
 #include "dex/dex_file_loader.h"
 #include "exec_utils.h"
@@ -1198,6 +1198,18 @@ class ImageSpace::Loader {
       if (!temp_map.IsValid()) {
         DCHECK(error_msg == nullptr || !error_msg->empty());
         return MemMap::Invalid();
+      }
+
+      Runtime* runtime = Runtime::Current();
+      // The runtime might not be available at this point if we're running
+      // dex2oat or oatdump.
+      if (runtime != nullptr) {
+        size_t madvise_size_limit = runtime->GetMadviseWillNeedSizeArt();
+        Runtime::MadviseFileForRange(madvise_size_limit,
+                                     temp_map.Size(),
+                                     temp_map.Begin(),
+                                     temp_map.End(),
+                                     image_filename);
       }
 
       if (is_compressed) {

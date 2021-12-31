@@ -257,7 +257,7 @@ class Thread {
 
   bool IsSuspended() const {
     union StateAndFlags state_and_flags;
-    state_and_flags.as_int = tls32_.state_and_flags.as_int;
+    state_and_flags.as_int = tls32_.state_and_flags.as_atomic_int.load(std::memory_order_relaxed);
     return state_and_flags.as_struct.state != kRunnable &&
         (state_and_flags.as_struct.flags & kSuspendRequest) != 0;
   }
@@ -1501,6 +1501,9 @@ class Thread {
   };
   static_assert(sizeof(StateAndFlags) == sizeof(int32_t), "Weird state_and_flags size");
 
+  // Format state and flags as a hex string. For diagnostic output.
+  std::string StateAndFlagsAsHexString() const;
+
   static void ThreadExitCallback(void* arg);
 
   // Maximum number of suspend barriers.
@@ -2028,7 +2031,7 @@ class ScopedExceptionStorage {
 };
 
 std::ostream& operator<<(std::ostream& os, const Thread& thread);
-std::ostream& operator<<(std::ostream& os, const StackedShadowFrameType& thread);
+std::ostream& operator<<(std::ostream& os, StackedShadowFrameType thread);
 
 }  // namespace art
 

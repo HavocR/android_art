@@ -57,7 +57,7 @@
 #include "cha.h"
 #include "class_linker-inl.h"
 #include "class_loader_utils.h"
-#include "class_root.h"
+#include "class_root-inl.h"
 #include "class_table-inl.h"
 #include "compiler_callbacks.h"
 #include "debug_print.h"
@@ -88,6 +88,7 @@
 #include "imtable-inl.h"
 #include "intern_table-inl.h"
 #include "interpreter/interpreter.h"
+#include "interpreter/mterp/nterp.h"
 #include "jit/debugger_interface.h"
 #include "jit/jit.h"
 #include "jit/jit_code_cache.h"
@@ -226,6 +227,22 @@ static void HandleEarlierVerifyError(Thread* self,
   self->AssertPendingException();
 }
 
+static void ChangeInterpreterBridgeToNterp(ArtMethod* method, ClassLinker* class_linker)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  Runtime* runtime = Runtime::Current();
+  if (class_linker->IsQuickToInterpreterBridge(method->GetEntryPointFromQuickCompiledCode()) &&
+      interpreter::CanMethodUseNterp(method)) {
+    if (method->GetDeclaringClass()->IsVisiblyInitialized() ||
+        !NeedsClinitCheckBeforeCall(method)) {
+      runtime->GetInstrumentation()->UpdateMethodsCode(method, interpreter::GetNterpEntryPoint());
+    } else {
+      // Put the resolution stub, which will initialize the class and then
+      // call the method with nterp.
+      runtime->GetInstrumentation()->UpdateMethodsCode(method, GetQuickResolutionStub());
+    }
+  }
+}
+
 // Ensures that methods have the kAccSkipAccessChecks bit set. We use the
 // kAccVerificationAttempted bit on the class access flags to determine whether this has been done
 // before.
@@ -240,16 +257,7 @@ static void EnsureSkipAccessChecksMethods(Handle<mirror::Class> klass, PointerSi
     // to methods that currently use the switch interpreter.
     if (interpreter::CanRuntimeUseNterp()) {
       for (ArtMethod& m : klass->GetMethods(pointer_size)) {
-        if (class_linker->IsQuickToInterpreterBridge(m.GetEntryPointFromQuickCompiledCode()) &&
-            interpreter::CanMethodUseNterp(&m)) {
-          if (klass->IsVisiblyInitialized() || !NeedsClinitCheckBeforeCall(&m)) {
-            runtime->GetInstrumentation()->UpdateMethodsCode(&m, interpreter::GetNterpEntryPoint());
-          } else {
-            // Put the resolution stub, which will initialize the class and then
-            // call the method with nterp.
-            runtime->GetInstrumentation()->UpdateMethodsCode(&m, GetQuickResolutionStub());
-          }
-        }
+        ChangeInterpreterBridgeToNterp(&m, class_linker);
       }
     }
   }
@@ -2132,11 +2140,7 @@ bool ClassLinker::AddImageSpace(
   if (interpreter::CanRuntimeUseNterp()) {
     // Set image methods' entry point that point to the interpreter bridge to the nterp entry point.
     header.VisitPackedArtMethods([&](ArtMethod& method) REQUIRES_SHARED(Locks::mutator_lock_) {
-      if (IsQuickToInterpreterBridge(method.GetEntryPointFromQuickCompiledCode()) &&
-          interpreter::CanMethodUseNterp(&method)) {
-        method.SetEntryPointFromQuickCompiledCodePtrSize(interpreter::GetNterpEntryPoint(),
-                                                         image_pointer_size_);
-      }
+      ChangeInterpreterBridgeToNterp(&method, this);
     }, space->Begin(), image_pointer_size_);
   }
 
@@ -8764,6 +8768,7 @@ ArtMethod* ClassLinker::ResolveMethod(uint32_t method_idx,
                                       Handle<mirror::ClassLoader> class_loader,
                                       ArtMethod* referrer,
                                       InvokeType type) {
+  DCHECK(!Thread::Current()->IsExceptionPending()) << Thread::Current()->GetException()->Dump();
   DCHECK(dex_cache != nullptr);
   DCHECK(referrer == nullptr || !referrer->IsProxyMethod());
   // Check for hit in the dex cache.
@@ -8911,6 +8916,7 @@ ArtField* ClassLinker::ResolveField(uint32_t field_idx,
                                     Handle<mirror::ClassLoader> class_loader,
                                     bool is_static) {
   DCHECK(dex_cache != nullptr);
+  DCHECK(!Thread::Current()->IsExceptionPending()) << Thread::Current()->GetException()->Dump();
   ArtField* resolved = dex_cache->GetResolvedField(field_idx, image_pointer_size_);
   Thread::PoisonObjectPointersIfDebug();
   if (resolved != nullptr) {

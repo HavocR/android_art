@@ -388,6 +388,8 @@ class DexFile {
   const char* GetMethodName(const dex::MethodId& method_id) const;
   const char* GetMethodName(const dex::MethodId& method_id, uint32_t* utf_length) const;
   const char* GetMethodName(uint32_t idx, uint32_t* utf_length) const;
+  std::string_view GetMethodNameView(const dex::MethodId& method_id) const;
+  std::string_view GetMethodNameView(uint32_t idx) const;
 
   // Returns the shorty of a method by its index.
   const char* GetMethodShorty(uint32_t idx) const;
@@ -963,7 +965,7 @@ class EncodedArrayValueIterator {
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(EncodedArrayValueIterator);
 };
-std::ostream& operator<<(std::ostream& os, const EncodedArrayValueIterator::ValueType& code);
+std::ostream& operator<<(std::ostream& os, EncodedArrayValueIterator::ValueType code);
 
 class EncodedStaticFieldValueIterator : public EncodedArrayValueIterator {
  public:
@@ -976,7 +978,6 @@ class EncodedStaticFieldValueIterator : public EncodedArrayValueIterator {
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(EncodedStaticFieldValueIterator);
 };
-std::ostream& operator<<(std::ostream& os, const EncodedStaticFieldValueIterator::ValueType& code);
 
 class CallSiteArrayValueIterator : public EncodedArrayValueIterator {
  public:
@@ -991,7 +992,6 @@ class CallSiteArrayValueIterator : public EncodedArrayValueIterator {
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(CallSiteArrayValueIterator);
 };
-std::ostream& operator<<(std::ostream& os, const CallSiteArrayValueIterator::ValueType& code);
 
 }  // namespace art
 

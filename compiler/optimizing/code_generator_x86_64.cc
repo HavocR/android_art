@@ -24,6 +24,7 @@
 #include "gc/accounting/card_table.h"
 #include "gc/space/image_space.h"
 #include "heap_poisoning.h"
+#include "interpreter/mterp/nterp.h"
 #include "intrinsics.h"
 #include "intrinsics_x86_64.h"
 #include "jit/profiling_info.h"
@@ -1134,7 +1135,7 @@ void CodeGeneratorX86_64::LoadBootImageAddress(CpuRegister reg, uint32_t boot_im
     __ movl(reg, Address::Absolute(CodeGeneratorX86_64::kDummy32BitOffset, /* no_rip= */ false));
     RecordBootImageRelRoPatch(boot_image_reference);
   } else {
-    DCHECK(Runtime::Current()->UseJitCompilation());
+    DCHECK(GetCompilerOptions().IsJitCompiler());
     gc::Heap* heap = Runtime::Current()->GetHeap();
     DCHECK(!heap->GetBootImageSpaces().empty());
     const uint8_t* address = heap->GetBootImageSpaces()[0]->Begin() + boot_image_reference;
@@ -1372,7 +1373,9 @@ void CodeGeneratorX86_64::MaybeIncrementHotness(bool is_frame_entry) {
       __ movq(CpuRegister(TMP), Immediate(address));
       __ addw(Address(CpuRegister(TMP), ProfilingInfo::BaselineHotnessCountOffset().Int32Value()),
               Immediate(1));
-      __ j(kCarryClear, &done);
+      __ andw(Address(CpuRegister(TMP), ProfilingInfo::BaselineHotnessCountOffset().Int32Value()),
+              Immediate(interpreter::kTieredHotnessMask));
+      __ j(kNotZero, &done);
       if (HasEmptyFrame()) {
         CHECK(is_frame_entry);
         // Frame alignment, and the stub expects the method on the stack.
@@ -5966,11 +5969,11 @@ HLoadClass::LoadKind CodeGeneratorX86_64::GetSupportedLoadClassKind(
     case HLoadClass::LoadKind::kBootImageLinkTimePcRelative:
     case HLoadClass::LoadKind::kBootImageRelRo:
     case HLoadClass::LoadKind::kBssEntry:
-      DCHECK(!Runtime::Current()->UseJitCompilation());
+      DCHECK(!GetCompilerOptions().IsJitCompiler());
       break;
     case HLoadClass::LoadKind::kJitBootImageAddress:
     case HLoadClass::LoadKind::kJitTableAddress:
-      DCHECK(Runtime::Current()->UseJitCompilation());
+      DCHECK(GetCompilerOptions().IsJitCompiler());
       break;
     case HLoadClass::LoadKind::kRuntimeCall:
       break;
@@ -6162,11 +6165,11 @@ HLoadString::LoadKind CodeGeneratorX86_64::GetSupportedLoadStringKind(
     case HLoadString::LoadKind::kBootImageLinkTimePcRelative:
     case HLoadString::LoadKind::kBootImageRelRo:
     case HLoadString::LoadKind::kBssEntry:
-      DCHECK(!Runtime::Current()->UseJitCompilation());
+      DCHECK(!GetCompilerOptions().IsJitCompiler());
       break;
     case HLoadString::LoadKind::kJitBootImageAddress:
     case HLoadString::LoadKind::kJitTableAddress:
-      DCHECK(Runtime::Current()->UseJitCompilation());
+      DCHECK(GetCompilerOptions().IsJitCompiler());
       break;
     case HLoadString::LoadKind::kRuntimeCall:
       break;

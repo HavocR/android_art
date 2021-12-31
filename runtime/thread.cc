@@ -56,7 +56,7 @@
 #include "base/to_str.h"
 #include "base/utils.h"
 #include "class_linker-inl.h"
-#include "class_root.h"
+#include "class_root-inl.h"
 #include "debugger.h"
 #include "dex/descriptors_names.h"
 #include "dex/dex_file-inl.h"
@@ -4343,6 +4343,12 @@ bool Thread::IsSystemDaemon() const {
   }
   return jni::DecodeArtField(
       WellKnownClasses::java_lang_Thread_systemDaemon)->GetBoolean(GetPeer());
+}
+
+std::string Thread::StateAndFlagsAsHexString() const {
+  std::stringstream result_stream;
+  result_stream << std::hex << tls32_.state_and_flags.as_atomic_int.load();
+  return result_stream.str();
 }
 
 ScopedExceptionStorage::ScopedExceptionStorage(art::Thread* self)
